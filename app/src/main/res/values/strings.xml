@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TrailCurrent</string>
+    <string name="login">Login</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="home">Home</string>
+    <string name="trailer">Trailer</string>
+    <string name="energy">Energy</string>
+    <string name="water">Water</string>
+    <string name="air_quality">Air Quality</string>
+    <string name="map">Map</string>
+    <string name="settings">Settings</string>
+    <string name="logout">Logout</string>
+    <string name="server_url">Server URL</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+</resources>

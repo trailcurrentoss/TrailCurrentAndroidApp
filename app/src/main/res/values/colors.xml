@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TrailCurrent Brand Colors -->
+    <color name="primary">#52A441</color>
+    <color name="primary_dark">#3D7B31</color>
+    <color name="primary_light">#7BC96A</color>
+    <color name="secondary">#D0E2C7</color>
+    <color name="secondary_dark">#9AB090</color>
+    <color name="accent">#83A79C</color>
+
+    <!-- Text colors -->
+    <color name="text_primary">#000000</color>
+    <color name="text_secondary">#505050</color>
+    <color name="text_light">#EBEBEB</color>
+    <color name="divider">#BDBDBD</color>
+
+    <!-- Background colors -->
+    <color name="background_light">#FAFAFA</color>
+    <color name="background_dark">#121212</color>
+    <color name="surface_dark">#1E1E1E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+
+    <!-- Subtle backgrounds -->
+    <color name="primary_bg_subtle">#DCEDD9</color>
+    <color name="secondary_bg_subtle">#EDF3EA</color>
+
+    <!-- Status colors (high-visibility neon) -->
+    <color name="status_good">#74FE00</color>
+    <color name="status_info">#48E6FE</color>
+    <color name="status_warning">#FFC107</color>
+    <color name="status_critical">#FF5453</color>
+
+    <!-- Tank colors -->
+    <color name="fresh_water">#48E6FE</color>
+    <color name="grey_water">#9E9E9E</color>
+    <color name="black_water">#424242</color>
+
+    <!-- Energy colors -->
+    <color name="solar">#FFC107</color>
+    <color name="battery_good">#74FE00</color>
+    <color name="battery_low">#FF5453</color>
+
+    <!-- Thermostat colors -->
+    <color name="heating">#FF5453</color>
+    <color name="cooling">#48E6FE</color>
+</resources>
