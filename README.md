@@ -1,6 +1,6 @@
 # TrailCurrent Android App
 
-Native Android application for the TrailCurrent vehicle monitoring and control system.
+Native Android application for the [TrailCurrent](https://trailcurrent.com) vehicle monitoring and control system.
 
 ## Overview
 
