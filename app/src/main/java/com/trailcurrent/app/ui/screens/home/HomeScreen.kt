@@ -43,6 +43,7 @@ import com.trailcurrent.app.data.websocket.WebSocketEvent
 import com.trailcurrent.app.data.websocket.WebSocketService
 import com.trailcurrent.app.ui.theme.TrailCurrentColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +68,22 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    // Suppress WebSocket updates for lights with in-flight commands.
+    // The server broadcasts stale state while processing a command, which
+    // races with the optimistic UI update and makes the light appear to turn off.
+    private val suppressedLightIds = mutableSetOf<Int>()
+    private val unsuppressJobs = mutableMapOf<Int, Job>()
+
+    private fun suppressLightUpdates(lightId: Int) {
+        suppressedLightIds.add(lightId)
+        unsuppressJobs[lightId]?.cancel()
+        unsuppressJobs[lightId] = viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            suppressedLightIds.remove(lightId)
+            unsuppressJobs.remove(lightId)
+        }
+    }
+
     init {
         observeWebSocketEvents()
         loadInitialData()
@@ -83,6 +100,8 @@ class HomeViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(currentTemp = event.state.tempInF)
                     }
                     is WebSocketEvent.Light -> {
+                        // Skip stale WebSocket updates while a command is in-flight
+                        if (event.light.id in suppressedLightIds) return@collect
                         val updatedLights = _uiState.value.lights.map { light ->
                             if (light.id == event.light.id) {
                                 // Merge: keep existing fields (like name) that WebSocket doesn't provide
@@ -153,46 +172,39 @@ class HomeViewModel @Inject constructor(
     }
 
     fun toggleLight(light: Light) {
+        val newState = if (light.state == 1) 0 else 1
+
+        // Suppress WebSocket updates and optimistically update UI
+        suppressLightUpdates(light.id)
+        val updatedLights = _uiState.value.lights.map { l ->
+            if (l.id == light.id) l.copy(state = newState) else l
+        }
+        _uiState.value = _uiState.value.copy(lights = updatedLights)
+
         viewModelScope.launch {
-            val newState = if (light.state == 1) 0 else 1
-            when (val result = vehicleRepository.updateLight(light.id, newState, null)) {
-                is ApiResult.Success -> {
-                    val updatedLights = _uiState.value.lights.map { l ->
-                        if (l.id == light.id) {
-                            // Merge to preserve name
-                            l.copy(state = result.data.state, brightness = result.data.brightness)
-                        } else l
-                    }
-                    _uiState.value = _uiState.value.copy(lights = updatedLights)
-                }
-                is ApiResult.Error -> {
-                    _uiState.value = _uiState.value.copy(error = result.message)
-                }
+            when (vehicleRepository.updateLight(light.id, newState, null)) {
+                is ApiResult.Success -> { /* UI already updated optimistically */ }
+                is ApiResult.Error -> { /* suppress — WebSocket will restore correct state after timeout */ }
             }
         }
     }
 
     fun setLightBrightness(light: Light, brightnessPercent: Int) {
-        viewModelScope.launch {
-            // brightnessPercent is 0-100 (percentage shown to user)
-            // API expects 0-255, so convert: percent * 255 / 100
-            // If brightness is 0, turn light off; otherwise turn on with specified brightness
-            val state = if (brightnessPercent > 0) 1 else 0
-            val actualBrightness = if (brightnessPercent > 0) (brightnessPercent * 255 / 100) else null
+        val state = if (brightnessPercent > 0) 1 else 0
+        val actualBrightness = if (brightnessPercent > 0) (brightnessPercent * 255 / 100) else 0
 
-            when (val result = vehicleRepository.updateLight(light.id, state, actualBrightness)) {
-                is ApiResult.Success -> {
-                    val updatedLights = _uiState.value.lights.map { l ->
-                        if (l.id == light.id) {
-                            // Merge to preserve name
-                            l.copy(state = result.data.state, brightness = result.data.brightness)
-                        } else l
-                    }
-                    _uiState.value = _uiState.value.copy(lights = updatedLights)
-                }
-                is ApiResult.Error -> {
-                    _uiState.value = _uiState.value.copy(error = result.message)
-                }
+        // Suppress WebSocket updates and optimistically update UI
+        suppressLightUpdates(light.id)
+        val updatedLights = _uiState.value.lights.map { l ->
+            if (l.id == light.id) l.copy(state = state, brightness = actualBrightness) else l
+        }
+        _uiState.value = _uiState.value.copy(lights = updatedLights)
+
+        // Send command to server (response may contain stale data, so ignore it)
+        viewModelScope.launch {
+            when (vehicleRepository.updateLight(light.id, state, actualBrightness)) {
+                is ApiResult.Success -> { /* UI already updated optimistically */ }
+                is ApiResult.Error -> { /* suppress — WebSocket will restore correct state after timeout */ }
             }
         }
     }
@@ -824,33 +836,44 @@ fun BrightnessDialog(
     onDismiss: () -> Unit,
     onBrightnessChange: (Int) -> Unit
 ) {
-    // Server uses 0-255 for all brightness values
-    // Convert to 0-100% for display, ViewModel converts back to 0-255 for API
-    fun serverToPercent(value: Int): Int = (value * 100 / 255).coerceIn(0, 100)
+    // Convert 0-255 server brightness to 10-100% slider range
+    val serverPercent = (light.brightness * 100 / 255).coerceIn(10, 100)
 
-    // Track if user is actively dragging the slider
-    var isInteracting by remember { mutableStateOf(false) }
+    // Local slider state — initialized once when dialog opens, then user-controlled
+    var sliderPercent by remember { mutableFloatStateOf(serverPercent.toFloat()) }
 
-    // Initialize slider with converted percentage (minimum 10% to prevent accidental off)
-    val initialPercent = serverToPercent(light.brightness).coerceAtLeast(10)
-    var sliderPercent by remember { mutableFloatStateOf(initialPercent.toFloat()) }
+    // Track the last value we actually sent to avoid duplicate API calls.
+    // Each API call is a CAN toggle, so duplicates cause on/off flicker.
+    var lastSentPercent by remember { mutableStateOf(serverPercent) }
 
-    // Update slider when server value changes, but only if user isn't actively adjusting
-    LaunchedEffect(light.brightness) {
-        if (!isInteracting) {
-            sliderPercent = serverToPercent(light.brightness).coerceAtLeast(10).toFloat()
+    val currentOnBrightnessChange by rememberUpdatedState(onBrightnessChange)
+
+    // Debounced send: fires 300ms after user stops moving the slider
+    val roundedPercent = sliderPercent.roundToInt()
+    LaunchedEffect(roundedPercent) {
+        if (roundedPercent != lastSentPercent) {
+            kotlinx.coroutines.delay(300)
+            lastSentPercent = roundedPercent
+            currentOnBrightnessChange(roundedPercent)
         }
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            // Only send if the current value hasn't been sent yet
+            val current = sliderPercent.roundToInt()
+            if (current != lastSentPercent) {
+                onBrightnessChange(current)
+            }
+            onDismiss()
+        },
         title = { Text("${light.name ?: "Light ${light.id}"} Brightness") },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "${sliderPercent.toInt()}%",
+                    text = "$roundedPercent%",
                     style = MaterialTheme.typography.headlineMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -858,22 +881,20 @@ fun BrightnessDialog(
 
                 Slider(
                     value = sliderPercent,
-                    onValueChange = {
-                        isInteracting = true
-                        sliderPercent = it
-                    },
-                    valueRange = 10f..100f,
-                    steps = 8,
-                    onValueChangeFinished = {
-                        // Send percentage (10-100) to the API - minimum 10% prevents accidental off
-                        onBrightnessChange(sliderPercent.toInt())
-                        isInteracting = false
-                    }
+                    onValueChange = { sliderPercent = it },
+                    valueRange = 10f..100f
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                // Only send if the current value hasn't been sent yet
+                val current = sliderPercent.roundToInt()
+                if (current != lastSentPercent) {
+                    onBrightnessChange(current)
+                }
+                onDismiss()
+            }) {
                 Text("Done")
             }
         }

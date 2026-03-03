@@ -45,6 +45,7 @@ class WebSocketService @Inject constructor(
     private var webSocket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var reconnectAttempts = 0
+    private var hasConnected = false
 
     private val _events = MutableSharedFlow<WebSocketEvent>(replay = 0, extraBufferCapacity = 64)
     val events: SharedFlow<WebSocketEvent> = _events
@@ -55,6 +56,7 @@ class WebSocketService @Inject constructor(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun connect(token: String?) {
+        hasConnected = true
         scope.launch {
             doConnect()
         }
@@ -67,13 +69,28 @@ class WebSocketService @Inject constructor(
         val apiKey = preferencesManager.getApiKey()
         Log.d(TAG, "Connecting to WebSocket: $wsUrl")
 
-        // Use the injected client with proper SSL config, but add WebSocket-specific settings
-        val wsClient = okHttpClient.newBuilder()
-            .readTimeout(0, TimeUnit.MILLISECONDS)
-            .pingInterval(30, TimeUnit.SECONDS)
-            .build()
+        if (wsUrl.isBlank()) {
+            Log.w(TAG, "WebSocket URL is blank, skipping connection")
+            return
+        }
 
-        val requestBuilder = Request.Builder().url(wsUrl)
+        // Use the injected client with proper SSL config, but add WebSocket-specific settings
+        val wsClient = try {
+            okHttpClient.newBuilder()
+                .readTimeout(0, TimeUnit.MILLISECONDS)
+                .pingInterval(30, TimeUnit.SECONDS)
+                .build()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to build WebSocket client: ${e.message}", e)
+            return
+        }
+
+        val requestBuilder = try {
+            Request.Builder().url(wsUrl)
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Invalid WebSocket URL: $wsUrl", e)
+            return
+        }
         if (!apiKey.isNullOrBlank()) {
             requestBuilder.addHeader("Authorization", apiKey)
         }
@@ -198,6 +215,17 @@ class WebSocketService @Inject constructor(
             Log.d(TAG, "Scheduling reconnect in ${delayMs}ms (attempt ${reconnectAttempts + 1})")
             delay(delayMs)
             reconnectAttempts++
+            doConnect()
+        }
+    }
+
+    fun reconnectIfNeeded() {
+        if (_connectionState.value || !hasConnected) return
+        Log.d(TAG, "App resumed — resetting reconnect counter and reconnecting")
+        reconnectAttempts = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
+        scope.launch {
             doConnect()
         }
     }

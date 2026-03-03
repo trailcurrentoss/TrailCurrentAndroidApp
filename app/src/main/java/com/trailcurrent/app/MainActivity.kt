@@ -18,8 +18,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -128,6 +131,10 @@ class MainViewModel @Inject constructor(
         vehicleRepository.setApiService(apiService)
     }
 
+    fun onAppForegrounded() {
+        webSocketService.reconnectIfNeeded()
+    }
+
     override fun onCleared() {
         super.onCleared()
         webSocketService.destroy()
@@ -142,6 +149,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = hiltViewModel()
             val uiState by viewModel.uiState.collectAsState()
+
+            // Reconnect WebSocket when app returns to foreground
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_START) {
+                        viewModel.onAppForegrounded()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
 
             TrailCurrentTheme(darkTheme = uiState.darkMode) {
                 Surface(color = MaterialTheme.colorScheme.background) {

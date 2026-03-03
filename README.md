@@ -4,18 +4,17 @@ Native Android application for the [TrailCurrent](https://trailcurrent.com) vehi
 
 ## Overview
 
-This Android app provides a native mobile interface for the TrailCurrent cloud-based vehicle control system. It communicates with the TrailCurrentCloud backend via REST API and WebSockets for real-time updates.
+This Android app provides a native mobile interface for the TrailCurrent in-vehicle control system. It communicates with the TrailCurrent backend via REST API for commands and WebSockets for real-time status updates.
 
 ## Features
 
-- **Authentication**: Secure login with session management
-- **Home Dashboard**: Thermostat control and lighting management
-- **Trailer Monitoring**: Level indicators and GPS/GNSS details
+- **Home Dashboard**: Nest-style thermostat dial and light controls with brightness adjustment
+- **Trailer Monitoring**: Level indicators and GPS/GNSS details with heading
 - **Energy Monitoring**: Solar input, battery status, and charge information
 - **Water Tanks**: Fresh, grey, and black water tank levels
 - **Air Quality**: Temperature, humidity, IAQ index, and CO2 monitoring
-- **Map View**: Real-time vehicle location with MapLibre (vector tiles)
-- **Settings**: Server configuration, theme options, and account management
+- **Map View**: Real-time vehicle location with MapLibre vector tiles, 2D/3D modes, and compass
+- **Settings**: Server configuration, dark/light theme, timezone, and clock format
 
 ## Tech Stack
 
@@ -23,18 +22,19 @@ This Android app provides a native mobile interface for the TrailCurrent cloud-b
 - **UI Framework**: Jetpack Compose with Material 3
 - **Architecture**: MVVM with Repository pattern
 - **Dependency Injection**: Hilt
-- **Networking**: Retrofit + OkHttp
-- **Real-time Updates**: WebSocket (OkHttp)
+- **Networking**: Retrofit + OkHttp (REST), OkHttp WebSocket (real-time)
 - **Local Storage**: DataStore Preferences
 - **Maps**: MapLibre GL (vector tiles from tileserver-gl)
+- **Authentication**: API key via Authorization header
 - **Minimum SDK**: 26 (Android 8.0)
 - **Target SDK**: 34 (Android 14)
 
 ## Configuration
 
-On first launch, the app will prompt you to configure the server connection:
+On first launch, the app will prompt for:
 
-1. **Server URL**: The base URL of your TrailCurrentCloud server (e.g., `https://your-server.com`)
+1. **Server URL**: The base URL of your TrailCurrent server (e.g., `https://your-server.com`)
+2. **API Key**: Authentication key for the server
 
 The WebSocket URL is automatically derived from the server URL. These settings can be changed later in the Settings screen.
 
@@ -71,19 +71,18 @@ The WebSocket URL is automatically derived from the server URL. These settings c
 
 ```
 app/src/main/java/com/trailcurrent/app/
-├── TrailCurrentApp.kt          # Application class
-├── MainActivity.kt             # Main entry point with navigation
+├── TrailCurrentApp.kt          # Application class (Hilt entry point)
+├── MainActivity.kt             # Main entry point, navigation, lifecycle management
 ├── data/
 │   ├── api/
 │   │   ├── ApiService.kt       # Retrofit API interface
-│   │   └── AuthInterceptor.kt  # Auth token injection
+│   │   └── AuthInterceptor.kt  # API key header injection
 │   ├── model/
 │   │   └── Models.kt           # Data classes
 │   ├── repository/
-│   │   ├── AuthRepository.kt   # Authentication logic
 │   │   └── VehicleRepository.kt # Vehicle data access
 │   └── websocket/
-│       └── WebSocketService.kt  # Real-time updates
+│       └── WebSocketService.kt  # Real-time updates with auto-reconnect
 ├── di/
 │   └── AppModule.kt            # Hilt dependency injection
 ├── ui/
@@ -94,33 +93,29 @@ app/src/main/java/com/trailcurrent/app/
 │   ├── screens/
 │   │   ├── airquality/         # Air quality monitoring
 │   │   ├── energy/             # Energy/battery status
-│   │   ├── home/               # Dashboard with thermostat/lights
-│   │   ├── login/              # Authentication
-│   │   ├── map/                # GPS location map
-│   │   ├── settings/           # App configuration
+│   │   ├── home/               # Dashboard with thermostat and lights
+│   │   ├── map/                # GPS location map with compass
+│   │   ├── settings/           # Server config and app settings
 │   │   ├── trailer/            # Level and GNSS info
 │   │   └── water/              # Tank levels
 │   └── theme/
-│       ├── Theme.kt            # Material theme
+│       ├── Theme.kt            # Material theme with dark mode
 │       └── Type.kt             # Typography
 └── util/
-    └── PreferencesManager.kt   # Local settings storage
+    └── PreferencesManager.kt   # Local settings storage (DataStore)
 ```
 
 ## API Integration
 
-The app connects to the TrailCurrentCloud backend using:
+The app connects to the TrailCurrent backend using:
 
 ### REST API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/auth/login` | POST | User authentication |
-| `/api/auth/logout` | POST | End session |
-| `/api/auth/check` | GET | Verify auth status |
 | `/api/thermostat` | GET/PUT | Thermostat state |
 | `/api/lights` | GET | List all lights |
-| `/api/lights/:id` | PUT | Update single light |
+| `/api/lights/:id` | PUT | Update single light (state + brightness) |
 | `/api/trailer/level` | GET | Trailer level data |
 | `/api/energy` | GET | Energy/battery status |
 | `/api/water` | GET | Water tank levels |
@@ -129,7 +124,7 @@ The app connects to the TrailCurrentCloud backend using:
 
 ### WebSocket Events
 
-The app subscribes to real-time updates via WebSocket:
+The app maintains a persistent WebSocket connection for real-time updates with automatic reconnection (exponential backoff, resumes on app foreground):
 
 - `thermostat` - Thermostat state changes
 - `light` - Individual light updates
@@ -139,15 +134,24 @@ The app subscribes to real-time updates via WebSocket:
 - `temphumid` - Temperature and humidity
 - `latlon` - GPS coordinates
 - `alt` - Altitude data
-- `gnss_details` - Satellite info
+- `gnss_details` - Satellite and heading info
 - `level` - Trailer level sensor
+
+### Map Tiles
+
+The map uses MapLibre GL with vector tiles served by tileserver-gl. Available styles:
+
+- `3d` - Light theme with 3D perspective
+- `3d-dark` - Dark theme with 3D perspective
+
+Style URLs follow the pattern: `{serverUrl}/styles/{styleName}/style.json`
 
 ## Security
 
-- Authentication tokens stored securely using DataStore
-- All network communication uses HTTPS
-- WebSocket connection authenticated with bearer token
-- No sensitive data logged in release builds
+- API key stored securely using Android DataStore
+- All network communication uses HTTPS/WSS
+- WebSocket connection authenticated with API key header
+- Custom SSL trust manager for self-signed certificates in development
 
 ## License
 

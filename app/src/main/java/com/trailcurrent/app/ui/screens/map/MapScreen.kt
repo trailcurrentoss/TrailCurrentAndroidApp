@@ -115,8 +115,7 @@ class MapViewModel @Inject constructor(
 
     fun getStyleUrl(serverUrl: String, darkMode: Boolean): String {
         val baseUrl = serverUrl.trimEnd('/')
-        val styleName = if (darkMode) "dark" else "basic"
-        // Load style directly from tileserver-gl
+        val styleName = if (darkMode) "3d-dark" else "3d"
         return "$baseUrl/styles/$styleName/style.json"
     }
 }
