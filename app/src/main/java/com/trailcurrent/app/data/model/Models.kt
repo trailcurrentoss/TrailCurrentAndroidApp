@@ -34,6 +34,11 @@ data class Light(
     @SerializedName("updated_at") val updatedAt: String?
 )
 
+data class LightConfig(
+    val id: Int,
+    val name: String?
+)
+
 data class LightUpdateRequest(
     val state: Int,
     val brightness: Int? = null

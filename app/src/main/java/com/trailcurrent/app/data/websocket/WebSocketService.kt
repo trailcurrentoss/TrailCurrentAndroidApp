@@ -26,6 +26,7 @@ sealed class WebSocketEvent {
     data class Altitude(val altitude: GpsAltitude) : WebSocketEvent()
     data class GnssDetails(val details: com.trailcurrent.app.data.model.GnssDetails) : WebSocketEvent()
     data class Level(val level: TrailerLevel) : WebSocketEvent()
+    data class LightsConfig(val lights: List<LightConfig>) : WebSocketEvent()
     data class ConnectionStatus(val connected: Boolean, val error: String? = null) : WebSocketEvent()
 }
 
@@ -183,6 +184,10 @@ class WebSocketService @Inject constructor(
                 "level" -> {
                     val level = gson.fromJson(data, TrailerLevel::class.java)
                     WebSocketEvent.Level(level)
+                }
+                "lights_config" -> {
+                    val configArray = gson.fromJson(data, Array<LightConfig>::class.java)
+                    WebSocketEvent.LightsConfig(configArray.toList())
                 }
                 else -> {
                     Log.w(TAG, "Unknown WebSocket message type: $type")

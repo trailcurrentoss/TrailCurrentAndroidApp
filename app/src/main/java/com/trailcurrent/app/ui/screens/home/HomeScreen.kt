@@ -103,13 +103,22 @@ class HomeViewModel @Inject constructor(
                         val isSuppressed = event.light.id in suppressedLightIds
                         val updatedLights = _uiState.value.lights.map { light ->
                             if (light.id == event.light.id) {
-                                // Merge: keep existing fields (like name) that WebSocket doesn't provide
                                 light.copy(
                                     // During suppression, keep optimistic state but accept brightness from PDM
                                     state = if (isSuppressed) light.state else event.light.state,
-                                    brightness = event.light.brightness
+                                    brightness = event.light.brightness,
+                                    // Update name from WebSocket if provided (PWA may rename lights)
+                                    name = event.light.name ?: light.name
                                 )
                             } else light
+                        }
+                        _uiState.value = _uiState.value.copy(lights = updatedLights)
+                    }
+                    is WebSocketEvent.LightsConfig -> {
+                        val configMap = event.lights.associateBy { it.id }
+                        val updatedLights = _uiState.value.lights.map { light ->
+                            val config = configMap[light.id]
+                            if (config != null) light.copy(name = config.name) else light
                         }
                         _uiState.value = _uiState.value.copy(lights = updatedLights)
                     }
