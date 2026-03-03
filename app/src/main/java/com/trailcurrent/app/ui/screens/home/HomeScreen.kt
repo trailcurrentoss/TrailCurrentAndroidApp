@@ -100,13 +100,13 @@ class HomeViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(currentTemp = event.state.tempInF)
                     }
                     is WebSocketEvent.Light -> {
-                        // Skip stale WebSocket updates while a command is in-flight
-                        if (event.light.id in suppressedLightIds) return@collect
+                        val isSuppressed = event.light.id in suppressedLightIds
                         val updatedLights = _uiState.value.lights.map { light ->
                             if (light.id == event.light.id) {
                                 // Merge: keep existing fields (like name) that WebSocket doesn't provide
                                 light.copy(
-                                    state = event.light.state,
+                                    // During suppression, keep optimistic state but accept brightness from PDM
+                                    state = if (isSuppressed) light.state else event.light.state,
                                     brightness = event.light.brightness
                                 )
                             } else light
