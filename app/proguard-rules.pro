@@ -23,7 +23,7 @@
 -keep class * implements com.google.gson.JsonDeserializer
 
 # Keep data models
--keep class com.trailcurrent.app.data.model.** { *; }
+-keep class com.trailcurrentoutbound.app.data.model.** { *; }
 
 # Keep enum classes
 -keepclassmembers enum * {

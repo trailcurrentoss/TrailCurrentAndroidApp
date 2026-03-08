@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.trailcurrent.app"
+    namespace = "com.trailcurrentoutbound.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.trailcurrent.app"
+        applicationId = "com.trailcurrentoutbound.app"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

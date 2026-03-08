@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- TrailCurrent Brand Colors -->
+    <!-- TrailCurrent Outbound Brand Colors -->
     <color name="primary">#52A441</color>
     <color name="primary_dark">#3D7B31</color>
     <color name="primary_light">#7BC96A</color>

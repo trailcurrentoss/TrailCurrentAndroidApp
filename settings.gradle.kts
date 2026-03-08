@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TrailCurrentApp"
+rootProject.name = "TrailCurrentOutboundApp"
 include(":app")
